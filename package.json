@@ -29,5 +29,16 @@
   },
   "homepage": "https://github.com/baloogedit/car-maintenance-tracker#readme",
   "private": true,
-  "workspaces": ["apps/*"]
+  "workspaces": [
+    "apps/*"
+  ],
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "concurrently": "^10.0.6",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-simple-import-sort": "^14.0.0",
+    "prettier": "^3.9.10",
+    "typescript-eslint": "^8.72.0"
+  }
 }
