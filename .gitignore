@@ -1,4 +1,4 @@
-node_modules/,
- dist/, 
- .env, 
- .expo/
+node_modules
+dist
+.env
+.expo
