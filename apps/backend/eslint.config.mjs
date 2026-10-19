@@ -5,8 +5,17 @@ import base from '../../eslint.config.base.mjs';
 export default tseslint.config(
   ...base,
 
+  // "typed linting" bekapcsolasa: a no-floating-promises szabaly tipus-
+  // informaciot igenyel (tudnia kell, hogy egy kifejezes Promise-e vagy nem),
+  // ehhez a typescript-eslint-nek latnia kell a tsconfig-ot.
+  ...tseslint.configs.recommendedTypeChecked,
+
   {
     languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
       globals: {
         process: 'readonly',
       },

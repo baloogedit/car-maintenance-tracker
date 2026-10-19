@@ -1,4 +1,4 @@
-import expoConfig from 'eslint-config-expo/flat';
+import expoConfig from 'eslint-config-expo/flat.js';
 import prettier from 'eslint-config-prettier';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 
