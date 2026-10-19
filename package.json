@@ -1,10 +1,20 @@
 {
   "name": "car-maintenance-tracker",
   "version": "1.0.0",
-  "description": "",
+  "description": "Auto karbantartas-koveto alkalmazas - diplomamunka monorepo (NestJS backend + Expo/React Native mobile)",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "concurrently -n backend,mobile -c blue,green \"npm:dev:backend\" \"npm:dev:mobile\"",
+    "dev:backend": "npm run start:dev --workspace=apps/backend",
+    "dev:mobile": "npm run start --workspace=apps/mobile",
+    "build": "npm run build --workspace=apps/backend",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:backend": "npm run lint --workspace=apps/backend",
+    "lint:mobile": "npm run lint --workspace=apps/mobile",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
   },
   "repository": {
     "type": "git",
