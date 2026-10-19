@@ -1,0 +1,13 @@
+node_modules
+dist
+build
+coverage
+.expo
+.expo-shared
+apps/mobile/android
+apps/mobile/ios
+apps/mobile/web-build
+package-lock.json
+*.lock
+*.svg
+CHANGELOG.md
