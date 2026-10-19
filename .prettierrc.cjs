@@ -23,7 +23,7 @@ module.exports = {
   semi: true,
 
   // line length that the printer will wrap on
-  printWidth: 80,
+  printWidth: 100,
 
   // put spaces between brackets in object literals
   bracketSpacing: false,

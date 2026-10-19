@@ -4,15 +4,15 @@ Diplomamunka projekt — mobil alkalmazás gépjárművek karbantartásának, ü
 
 ## Tech stack
 
-| Réteg | Technológia |
-|---|---|
-| Mobil frontend | React Native + TypeScript, Expo (Custom Development Client), Expo Router |
-| Backend | NestJS + TypeScript |
-| ORM | Prisma |
-| Adatbázis | SQL Server 2025 Express |
-| Offline tárolás | SQLite (mobil kliens oldalon) |
-| API | REST / JSON |
-| Autentikáció | JWT + refresh token |
+| Réteg           | Technológia                                                              |
+| --------------- | ------------------------------------------------------------------------ |
+| Mobil frontend  | React Native + TypeScript, Expo (Custom Development Client), Expo Router |
+| Backend         | NestJS + TypeScript                                                      |
+| ORM             | Prisma                                                                   |
+| Adatbázis       | SQL Server 2025 Express                                                  |
+| Offline tárolás | SQLite (mobil kliens oldalon)                                            |
+| API             | REST / JSON                                                              |
+| Autentikáció    | JWT + refresh token                                                      |
 
 ## Monorepo struktúra
 
@@ -46,17 +46,17 @@ Az `apps/backend` alatt hozz létre egy `.env` fájlt a saját SQL Server kapcso
 
 A gyökérből futtatva (npm workspaces segítségével mindkét app-ot eléri):
 
-| Parancs | Mit csinál |
-|---|---|
-| `npm run dev` | backend + mobile egyszerre, külön színezett logokkal (concurrently) |
-| `npm run dev:backend` | csak a NestJS backend (watch módban) |
-| `npm run dev:mobile` | csak az Expo dev szerver |
-| `npm run lint` | lint futtatása mindkét workspace-en |
-| `npm run lint:backend` / `npm run lint:mobile` | lint csak az egyik app-on |
-| `npm run format` | Prettier formázás az egész repóra |
-| `npm run format:check` | csak ellenőrzés, nem ír felül semmit (CI-hez hasznos) |
-| `npm run test` | tesztek futtatása minden workspace-en, ahol van test script |
-| `npm run typecheck` | TypeScript típusellenőrzés mindkét app-on |
+| Parancs                                        | Mit csinál                                                          |
+| ---------------------------------------------- | ------------------------------------------------------------------- |
+| `npm run dev`                                  | backend + mobile egyszerre, külön színezett logokkal (concurrently) |
+| `npm run dev:backend`                          | csak a NestJS backend (watch módban)                                |
+| `npm run dev:mobile`                           | csak az Expo dev szerver                                            |
+| `npm run lint`                                 | lint futtatása mindkét workspace-en                                 |
+| `npm run lint:backend` / `npm run lint:mobile` | lint csak az egyik app-on                                           |
+| `npm run format`                               | Prettier formázás az egész repóra                                   |
+| `npm run format:check`                         | csak ellenőrzés, nem ír felül semmit (CI-hez hasznos)               |
+| `npm run test`                                 | tesztek futtatása minden workspace-en, ahol van test script         |
+| `npm run typecheck`                            | TypeScript típusellenőrzés mindkét app-on                           |
 
 ## Adatbázis (Prisma)
 
