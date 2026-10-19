@@ -1,9 +1,9 @@
-import { Image } from 'expo-image';
+import {Image} from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
-import { useState } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
-import Animated, { Easing, Keyframe } from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
+import {useState} from 'react';
+import {Dimensions, StyleSheet, View} from 'react-native';
+import Animated, {Easing, Keyframe} from 'react-native-reanimated';
+import {scheduleOnRN} from 'react-native-worklets';
 
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
@@ -16,7 +16,7 @@ export function AnimatedSplashOverlay() {
 
   const splashKeyframe = new Keyframe({
     0: {
-      transform: [{ scale: 1 }],
+      transform: [{scale: 1}],
       opacity: 1,
     },
     20: {
@@ -28,7 +28,7 @@ export function AnimatedSplashOverlay() {
     },
     100: {
       opacity: 0,
-      transform: [{ scale: 1 }],
+      transform: [{scale: 1}],
       easing: Easing.elastic(0.7),
     },
   });
@@ -43,7 +43,8 @@ export function AnimatedSplashOverlay() {
           scheduleOnRN(setVisible, false);
         }
       })}
-      style={styles.splashOverlay}>
+      style={styles.splashOverlay}
+    >
       {image}
     </Animated.View>
   ) : (
@@ -53,7 +54,8 @@ export function AnimatedSplashOverlay() {
           setAnimate(true);
         });
       }}
-      style={styles.splashOverlay}>
+      style={styles.splashOverlay}
+    >
       {image}
     </View>
   );
@@ -61,37 +63,37 @@ export function AnimatedSplashOverlay() {
 
 const keyframe = new Keyframe({
   0: {
-    transform: [{ scale: INITIAL_SCALE_FACTOR }],
+    transform: [{scale: INITIAL_SCALE_FACTOR}],
   },
   100: {
-    transform: [{ scale: 1 }],
+    transform: [{scale: 1}],
     easing: Easing.elastic(0.7),
   },
 });
 
 const logoKeyframe = new Keyframe({
   0: {
-    transform: [{ scale: 1.3 }],
+    transform: [{scale: 1.3}],
     opacity: 0,
   },
   40: {
-    transform: [{ scale: 1.3 }],
+    transform: [{scale: 1.3}],
     opacity: 0,
     easing: Easing.elastic(0.7),
   },
   100: {
     opacity: 1,
-    transform: [{ scale: 1 }],
+    transform: [{scale: 1}],
     easing: Easing.elastic(0.7),
   },
 });
 
 const glowKeyframe = new Keyframe({
   0: {
-    transform: [{ rotateZ: '0deg' }],
+    transform: [{rotateZ: '0deg'}],
   },
   100: {
-    transform: [{ rotateZ: '7200deg' }],
+    transform: [{rotateZ: '7200deg'}],
   },
 });
 
