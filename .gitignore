@@ -50,3 +50,9 @@ Thumbs.db
 # ---------- misc ----------
 *.pem
 .turbo/
+
+# ---------- AI eszkoz konfiguraciok (lokalis, nem resze a projektnek) ----------
+.claude/
+.windsurf/
+.agents/
+skills-lock.json

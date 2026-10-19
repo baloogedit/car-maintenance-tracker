@@ -1,0 +1,360 @@
+// Prisma schema - auto karbantarto app
+// Adatbazis: SQL Server 2025 Express
+//
+// FONTOS: az SQL Server Prisma-konnektor nem tamogatja az enum tipust,
+// ezert minden korabbi enum String mezore lett cserelve. Az engedelyezett
+// ertekeket a NestJS backend oldalon TypeScript enumkent / class-validator
+// DTO-kent kell kikenyszeriteni, az adatbazis szintjen nincs korlatozas.
+//
+// Minden relacio explicit onUpdate: NoAction-t kap, mert a PK-k UUID-k,
+// sosem valtoznak - ez elkeruli a Prisma "multiple cascade paths" hibajat,
+// amit az alapertelmezett onUpdate: Cascade viselkedes okozna.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- FELHASZNALOK / CEGEK ----------
+// UserRole ertekek: "PRIVATE" | "COMPANY_ADMIN" | "COMPANY_MEMBER"
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  taxId     String?  @unique
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users     User[]
+  vehicles  Vehicle[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String // regisztracional kotelezo
+  lastName     String?
+  role         String   @default("PRIVATE") // "PRIVATE" | "COMPANY_ADMIN" | "COMPANY_MEMBER"
+  companyId    String?
+  company      Company? @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isDeleted    Boolean  @default(false) @map("is_deleted")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  vehicles      Vehicle[]
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  vehicleEvents VehicleEvent[]
+  attachments   Attachment[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+}
+
+// ---------- JARMU ----------
+// FuelType ertekek: "GASOLINE" | "DIESEL" | "ELECTRIC" | "HYBRID" | "LPG"
+
+model Vehicle {
+  id             String    @id @default(uuid())
+  ownerUserId    String
+  owner          User      @relation(fields: [ownerUserId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  companyId      String?
+  company        Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  make           String
+  model          String
+  year           Int
+  vin            String?   @unique
+  licensePlate   String?
+  engineType     String?
+  fuelType       String    @default("GASOLINE") // "GASOLINE" | "DIESEL" | "ELECTRIC" | "HYBRID" | "LPG"
+  currentMileage Int       @default(0)
+  purchaseDate   DateTime?
+
+  isDeleted      Boolean   @default(false) @map("is_deleted")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  maintenanceLogs        MaintenanceLog[]
+  maintenancePredictions MaintenancePrediction[]
+  fuelLogs                FuelLog[]
+  insurances              Insurance[]
+  vehicleTaxes             VehicleTax[]
+  obdScans                ObdScan[]
+  aiDiagnostics            AiDiagnostic[]
+  notifications            Notification[]
+  events                   VehicleEvent[]
+  attachments              Attachment[]
+}
+
+// ---------- KARBANTARTAS ----------
+// MaintenanceType ertekek: "OIL_CHANGE" | "TIRE_ROTATION" | "TIRE_REPLACEMENT" |
+//   "BRAKE_SERVICE" | "BATTERY" | "FILTER_CHANGE" | "INSPECTION" | "OTHER"
+
+// Egy szervizlatogatas (datum + km-allas). A tenyleges elvegzett
+// muveleteket a MaintenanceOperation sorolja fel - egy latogataskor
+// tobb fele is lehet (pl. olajcsere + fekbetet csere egyszerre).
+// totalCost: denormalizalt/cache osszeg a operations.cost ertekekbol -
+// az app-reteg felelossege szinkronban tartani (pl. operation
+// letrehozas/torles/modositas utan ujraszamolni).
+model MaintenanceLog {
+  id               String   @id @default(uuid())
+  vehicleId        String
+  vehicle          Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  serviceDate      DateTime
+  mileageAtService Int
+  totalCost        Decimal? @db.Decimal(10, 2) // cache - app-oldalon tartjuk szinkronban az operations.cost sum-javal
+  notes            String?
+
+  synced           Boolean  @default(true) // offline-first: false amig nincs feltoltve
+  isDeleted        Boolean  @default(false) @map("is_deleted")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  operations       MaintenanceOperation[]
+  attachments      Attachment[]
+}
+
+// Egy konkret muvelet (tipus + koltseg) egy MaintenanceLog-on belul.
+model MaintenanceOperation {
+  id               String         @id @default(uuid())
+  maintenanceLogId String
+  maintenanceLog   MaintenanceLog @relation(fields: [maintenanceLogId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  type             String // "OIL_CHANGE" | "TIRE_ROTATION" | "TIRE_REPLACEMENT" | "BRAKE_SERVICE" | "BATTERY" | "FILTER_CHANGE" | "INSPECTION" | "OTHER"
+  cost             Decimal?       @db.Decimal(10, 2)
+  notes            String?
+
+  isDeleted        Boolean        @default(false) @map("is_deleted")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  @@index([maintenanceLogId, type])
+}
+
+// PredictionStatus ertekek: "PENDING" | "NOTIFIED" | "COMPLETED" | "DISMISSED"
+
+// predictedDueDate / predictedDueMileage: mindket mezo nullable, mert
+// egy predikcio lehet csak ido- vagy csak km-alapu (pl. muszaki vizsga
+// = csak datum, olajcsere-emlekezteto = csak km). Az app-reteg
+// biztositja, hogy legalabb egyik ki legyen toltve.
+model MaintenancePrediction {
+  id                  String    @id @default(uuid())
+  vehicleId           String
+  vehicle             Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  maintenanceType     String // lasd MaintenanceType ertekek fent
+  predictedDueDate    DateTime?
+  predictedDueMileage Int?
+  status              String    @default("PENDING") // "PENDING" | "NOTIFIED" | "COMPLETED" | "DISMISSED"
+
+  isDeleted           Boolean   @default(false) @map("is_deleted")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+}
+
+// ---------- UZEMANYAG ----------
+// FuelUnit ertekek: "LITER" | "KWH" | "GALLON"
+
+model FuelLog {
+  id        String   @id @default(uuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  date      DateTime
+  mileage   Int
+  quantity  Decimal  @db.Decimal(8, 2)
+  unit      String   @default("LITER") // "LITER" | "KWH" | "GALLON"
+  cost      Decimal  @db.Decimal(10, 2)
+  fullTank  Boolean  @default(true)
+
+  synced    Boolean  @default(true)
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+}
+
+// ---------- BIZTOSITAS / UTADO ----------
+
+model Insurance {
+  id           String   @id @default(uuid())
+  vehicleId    String
+  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  provider     String
+  policyNumber String
+  startDate    DateTime
+  endDate      DateTime
+  cost         Decimal  @db.Decimal(10, 2)
+
+  isDeleted    Boolean  @default(false) @map("is_deleted")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+}
+
+// Kocsi-kategoria szerint valtozo rovinietta kategoriak (A-H).
+// VehicleTaxCategory ertekek: "CATEGORY_A".."CATEGORY_H" | "OTHER"
+
+// Nincs unique constraint (vehicleId, year, category) kombinacion:
+// szandekosan, mert egy even belul tobb, rovidebb idotartamra szolo
+// rovinietta is vasarolhato ugyanahhoz a jarmuhoz.
+model VehicleTax {
+  id        String   @id @default(uuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  category  String // "CATEGORY_A".."CATEGORY_H" | "OTHER"
+  year      Int
+  amount    Decimal  @db.Decimal(10, 2)
+  dueDate   DateTime
+  paid      Boolean  @default(false)
+
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+}
+
+// ---------- OBD2 ----------
+// Severity ertekek: "INFO" | "WARNING" | "CRITICAL"
+
+model ObdScan {
+  id         String         @id @default(uuid())
+  vehicleId  String
+  vehicle    Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  scanDate   DateTime       @default(now())
+  rawData    String?        @db.NVarChar(Max)
+
+  isDeleted  Boolean        @default(false) @map("is_deleted")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  errorCodes ObdErrorCode[]
+}
+
+model ObdErrorCode {
+  id          String   @id @default(uuid())
+  obdScanId   String
+  obdScan     ObdScan  @relation(fields: [obdScanId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  code        String
+  description String?
+  severity    String   @default("INFO") // "INFO" | "WARNING" | "CRITICAL"
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+}
+
+// ---------- AI DIAGNOSZTIKA ----------
+
+model AiDiagnostic {
+  id         String   @id @default(uuid())
+  vehicleId  String
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  prompt     String?
+  aiResponse String   @db.NVarChar(Max)
+
+  isDeleted  Boolean  @default(false) @map("is_deleted")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  attachments Attachment[]
+}
+
+// ---------- CSATOLMANYOK ----------
+// MediaType ertekek: "IMAGE" | "VIDEO"
+// UploadStatus ertekek: "PENDING" | "UPLOADED" | "FAILED"
+
+model Attachment {
+  id         String   @id @default(uuid()) // a mobilapp generálja (offline)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vehicleId  String
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  // pontosan egy legyen kitöltve (ezt az app-réteg ellenőrzi)
+  maintenanceLogId String?
+  maintenanceLog   MaintenanceLog? @relation(fields: [maintenanceLogId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vehicleEventId   String?
+  vehicleEvent     VehicleEvent?   @relation(fields: [vehicleEventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  aiDiagnosticId   String?
+  aiDiagnostic     AiDiagnostic?   @relation(fields: [aiDiagnosticId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  mediaType  String // "IMAGE" | "VIDEO"
+  mimeType   String
+  sizeBytes  Int
+  storageKey String?                 // üres, amíg nincs feltöltve
+  status     String   @default("PENDING") // "PENDING" | "UPLOADED" | "FAILED"
+
+  isDeleted  Boolean  @default(false) @map("is_deleted")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([vehicleId])
+}
+
+// ---------- ALTALANOS ESEMENYNAPLO ----------
+// Szabad "type" mezo (nem enum), hogy meg nem implementalt kovetesi
+// igenyeket (pl. olajszint, regeneracio, egyeb megjegyzesek) fel
+// lehessen venni migracio nelkul. Az opcionalis "amount" mezo olyan
+// apro, egyedi koltsegekre valo (parkolas, autómosas), amiknek nincs
+// sajat tablajuk - ezekbol nem kell kulon ExpenseLog-ot epiteni,
+// az osszkoltseg-riport a MaintenanceOperation.cost + FuelLog.cost +
+// Insurance.cost + VehicleTax.amount + VehicleEvent.amount
+// aggregalasaval all ossze a backend oldalon.
+model VehicleEvent {
+  id        String   @id @default(uuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  type      String // pl. "oil_level", "regeneration", "parking", stb. - app-oldalon ertelmezve
+  note      String?
+  amount    Decimal? @db.Decimal(10, 2)
+
+  synced    Boolean  @default(true)
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  attachments Attachment[]
+
+  @@index([vehicleId, type])
+}
+
+// ---------- ERTESITESEK ----------
+// NotificationType ertekek: "MAINTENANCE_DUE" | "WEEKLY_MILEAGE" | "INSURANCE_EXPIRY" | "TAX_DUE" | "OBD_ALERT"
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  type      String // "MAINTENANCE_DUE" | "WEEKLY_MILEAGE" | "INSURANCE_EXPIRY" | "TAX_DUE" | "OBD_ALERT"
+  message   String
+  sentAt    DateTime?
+  read      Boolean  @default(false)
+
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+}
