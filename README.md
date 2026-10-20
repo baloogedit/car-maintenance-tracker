@@ -64,7 +64,7 @@ A gyökérből futtatva (npm workspaces segítségével mindkét app-ot eléri):
 cd apps/backend
 npx prisma migrate dev --name init
 npx prisma db seed
-npx prisma studio   # vizuális adatnézet böngészőben
+npx prisma studio   -> Adatbázis modellek vizuális megjelenítése és szerkesztése
 ```
 
 ## Licenc
