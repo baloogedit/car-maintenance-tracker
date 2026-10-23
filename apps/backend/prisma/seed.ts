@@ -75,13 +75,13 @@ async function main() {
       vehicleId: golf.id,
       serviceDate: new Date('2026-03-15'),
       mileageAtService: 175000,
-      totalCost: 98500,
+      totalCost: 740, // RON
       notes: 'Eves szerviz',
       operations: {
         create: [
-          {type: 'OIL_CHANGE', cost: 42000},
-          {type: 'FILTER_CHANGE', cost: 18500},
-          {type: 'BRAKE_SERVICE', cost: 38000, notes: 'Elso fekbetet'},
+          {type: 'OIL_CHANGE', cost: 350},
+          {type: 'FILTER_CHANGE', cost: 120},
+          {type: 'BRAKE_SERVICE', cost: 270, notes: 'Elso fekbetet'},
         ],
       },
     },
@@ -103,14 +103,14 @@ async function main() {
         date: new Date('2026-09-01'),
         mileage: 180500,
         quantity: 45.2,
-        cost: 28500,
+        cost: 329.96,
       },
       {
         vehicleId: golf.id,
         date: new Date('2026-09-20'),
         mileage: 181300,
         quantity: 38.7,
-        cost: 24400,
+        cost: 282.51,
       },
     ],
   });
@@ -122,7 +122,7 @@ async function main() {
       policyNumber: 'POL-2026-001',
       startDate: new Date('2026-01-01'),
       endDate: new Date('2026-12-31'),
-      cost: 145000,
+      cost: 1450,
     },
   });
 
@@ -131,7 +131,7 @@ async function main() {
       vehicleId: transit.id,
       category: 'CATEGORY_B',
       year: 2026,
-      amount: 18000,
+      amount: 550,
       dueDate: new Date('2026-12-15'),
     },
   });
@@ -154,7 +154,7 @@ async function main() {
       userId: privateUser.id,
       type: 'parking',
       note: 'Belvarosi parkolo',
-      amount: 1800,
+      amount: 15,
     },
   });
 
