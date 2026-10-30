@@ -12,10 +12,17 @@
 // Minden osszeg RON-ban van. Minden sor synced = true (alapertelmezes), es
 // minden csatolmany UPLOADED, mert ezek a kozponti adatbazisban vannak - az
 // offline/nem szinkronizalt allapot csak a mobil SQLite-ban ertelmezett.
+// A version (rowversion) mezot az SQL Server tolti ki, a clientUpdatedAt
+// alapertelmezese now(), a deletedAt NULL - ezeket itt nem kell megadni.
+//
+// Szerzo (createdByUserId): maganszemelynel mindig a tulajdonos. Ceges jarmunel
+// a bejegyzesek a ceg felhasznaloi kozott forognak (admin es tagok), hogy a
+// "tag csak a sajat bejegyzeset szerkesztheti" szabalyt ki lehessen probalni.
+// A biztositas, utado es AI diagnosztika szerzoje a tulajdonos.
 
 import {PrismaClient} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import {randomUUID} from 'crypto';
+import {createHash, randomUUID} from 'crypto';
 import 'dotenv/config';
 
 const prisma = new PrismaClient();
@@ -283,10 +290,10 @@ async function cleanup() {
     where: {OR: [{userId: {in: userIds}}, {vehicleId: {in: vehicleIds}}]},
   });
   await prisma.attachment.deleteMany({
-    where: {OR: [{userId: {in: userIds}}, {vehicleId: {in: vehicleIds}}]},
+    where: {OR: [{createdByUserId: {in: userIds}}, {vehicleId: {in: vehicleIds}}]},
   });
   await prisma.vehicleEvent.deleteMany({
-    where: {OR: [{userId: {in: userIds}}, {vehicleId: {in: vehicleIds}}]},
+    where: {OR: [{createdByUserId: {in: userIds}}, {vehicleId: {in: vehicleIds}}]},
   });
   await prisma.vehicle.deleteMany({where: {id: {in: vehicleIds}}}); // gyerektablak cascade
   await prisma.refreshToken.deleteMany({where: {userId: {in: userIds}}});
@@ -323,7 +330,10 @@ async function main() {
   await prisma.refreshToken.createMany({
     data: userIds.slice(0, 5).map((userId, i) => ({
       userId,
-      token: `seed2-refresh-token-${i + 1}`,
+      // csak a hash kerul a DB-be (SHA-256 hex), a nyers token soha
+      tokenHash: createHash('sha256')
+        .update(`seed2-refresh-token-${i + 1}`)
+        .digest('hex'),
       expiresAt: addDays(TODAY, 60),
       revoked: i === 4,
     })),
@@ -332,6 +342,7 @@ async function main() {
   const maintenanceLogs: {
     id: string;
     vehicleId: string;
+    createdByUserId: string;
     serviceDate: Date;
     mileageAtService: number;
     totalCost: number;
@@ -348,6 +359,7 @@ async function main() {
   }[] = [];
   const fuelLogs: {
     vehicleId: string;
+    createdByUserId: string;
     date: Date;
     mileage: number;
     quantity: number;
@@ -357,6 +369,7 @@ async function main() {
   }[] = [];
   const insurances: {
     vehicleId: string;
+    createdByUserId: string;
     provider: string;
     policyNumber: string;
     startDate: Date;
@@ -365,26 +378,39 @@ async function main() {
   }[] = [];
   const taxes: {
     vehicleId: string;
+    createdByUserId: string;
     category: string;
     year: number;
     amount: number;
     dueDate: Date;
     paid: boolean;
   }[] = [];
-  const obdScans: {id: string; vehicleId: string; scanDate: Date; rawData: string}[] = [];
+  const obdScans: {
+    id: string;
+    vehicleId: string;
+    createdByUserId: string;
+    scanDate: Date;
+    rawData: string;
+  }[] = [];
   const obdErrorCodes: {obdScanId: string; code: string; description: string; severity: string}[] =
     [];
-  const aiDiagnostics: {id: string; vehicleId: string; prompt: string; aiResponse: string}[] = [];
+  const aiDiagnostics: {
+    id: string;
+    vehicleId: string;
+    createdByUserId: string;
+    prompt: string;
+    aiResponse: string;
+  }[] = [];
   const vehicleEvents: {
     id: string;
     vehicleId: string;
-    userId: string;
+    createdByUserId: string;
     type: string;
     note: string;
     amount: number | null;
   }[] = [];
   const attachments: {
-    userId: string;
+    createdByUserId: string;
     vehicleId: string;
     maintenanceLogId?: string;
     vehicleEventId?: string;
@@ -410,6 +436,15 @@ async function main() {
     const ownerId = userIds[v.owner];
     const monthlyKm = KM_PER_MONTH[v.fuel];
 
+    // a bejegyzesek szerzoi: maganszemelynel csak a tulajdonos, cegnel a ceg
+    // osszes felhasznaloja felvaltva (determinisztikusan, PRNG nelkul)
+    const authorIds =
+      owner.companyIndex === null
+        ? [ownerId]
+        : users.flatMap((u, j) => (u.companyIndex === owner.companyIndex ? [userIds[j]] : []));
+    const author = (n: number) => authorIds[n % authorIds.length];
+    let fuelCount = 0;
+
     // ~18 honap visszamenoleg, havi tankolas/toltes; a km-allas novekszik
     let mileage = v.startKm;
     const historyStart = addDays(TODAY, -540);
@@ -421,6 +456,7 @@ async function main() {
       const unitPrice = isElectric ? 1.6 : v.fuel === 'LPG' ? 3.6 : v.fuel === 'DIESEL' ? 7.3 : 7.1; // RON / l vagy kWh
       fuelLogs.push({
         vehicleId,
+        createdByUserId: author(fuelCount++),
         date: addDays(historyStart, day),
         mileage,
         quantity,
@@ -460,6 +496,7 @@ async function main() {
       maintenanceLogs.push({
         id: logId,
         vehicleId,
+        createdByUserId: author(s),
         serviceDate,
         mileageAtService,
         totalCost, // = operations.cost osszege (cache mezo)
@@ -470,7 +507,7 @@ async function main() {
       });
       if (s === visitCount - 1) {
         attachments.push({
-          userId: ownerId,
+          createdByUserId: author(s), // a szervizlog szerzoje csatolta
           vehicleId,
           maintenanceLogId: logId,
           mediaType: 'IMAGE',
@@ -518,6 +555,7 @@ async function main() {
     for (const year of [2025, 2026]) {
       insurances.push({
         vehicleId,
+        createdByUserId: ownerId,
         provider: pick(INSURERS),
         policyNumber: `S2-${year}-${String(i + 1).padStart(3, '0')}`,
         startDate: new Date(`${year}-01-01`),
@@ -530,6 +568,7 @@ async function main() {
     taxes.push(
       {
         vehicleId,
+        createdByUserId: ownerId,
         category: v.category,
         year: 2025,
         amount: roundTo(randInt(140, 900), 5),
@@ -538,6 +577,7 @@ async function main() {
       },
       {
         vehicleId,
+        createdByUserId: ownerId,
         category: v.category,
         year: 2026,
         amount: roundTo(randInt(140, 900), 5),
@@ -548,6 +588,7 @@ async function main() {
     if (owner.companyIndex !== null) {
       taxes.push({
         vehicleId,
+        createdByUserId: ownerId,
         category: v.category,
         year: 2026,
         amount: roundTo(randInt(30, 150), 5),
@@ -567,6 +608,7 @@ async function main() {
       obdScans.push({
         id: scanId,
         vehicleId,
+        createdByUserId: author(s),
         scanDate,
         rawData: JSON.stringify({
           rpm: randInt(750, 900),
@@ -583,13 +625,14 @@ async function main() {
       aiDiagnostics.push({
         id: diagId,
         vehicleId,
+        createdByUserId: ownerId,
         prompt: `Mit jelent a muszerfalon vilagito sarga motorjelzo egy ${v.make} ${v.model} (${v.engine}) eseten?`,
         aiResponse:
           'A sarga motorjelzo altalaban emisszios hibat jelez. Erdemes OBD2-vel kiolvasni a hibakodot; ' +
           'ha a lampa villog, ne terheld a motort es mielobb keress fel szervizt.',
       });
       attachments.push({
-        userId: ownerId,
+        createdByUserId: ownerId,
         vehicleId,
         aiDiagnosticId: diagId,
         mediaType: i % 4 === 0 ? 'VIDEO' : 'IMAGE',
@@ -609,14 +652,14 @@ async function main() {
       vehicleEvents.push({
         id: eventId,
         vehicleId,
-        userId: ownerId,
+        createdByUserId: author(e),
         type: tpl.type,
         note: tpl.note,
         amount: tpl.amount ? randInt(tpl.amount[0], tpl.amount[1]) : null,
       });
       if (tpl.type === 'note') {
         attachments.push({
-          userId: ownerId,
+          createdByUserId: author(e), // az esemeny szerzoje csatolta
           vehicleId,
           vehicleEventId: eventId,
           mediaType: 'VIDEO',

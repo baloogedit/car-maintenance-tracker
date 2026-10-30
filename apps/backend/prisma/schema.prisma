@@ -9,19 +9,43 @@
 // Minden relacio explicit onUpdate: NoAction-t kap, mert a PK-k UUID-k,
 // sosem valtoznak - ez elkeruli a Prisma "multiple cascade paths" hibajat,
 // amit az alapertelmezett onUpdate: Cascade viselkedes okozna.
-
+//
+// ---------- SZINKRONIZACIO (2026-10-30) ----------
+// Minden szinkronizalt tabla ugyanazt a negy+egy mezot kapja (lasd az API es
+// szinkronizacios tervet):
+//   clientUpdatedAt         - a kliens utolso modositasa (orajavitva), LWW dontes
+//   version                 - SQL Server rowversion, a pull kurzor. A Prisma nem
+//                             ismeri a tipust, ezert Unsupported: a Prisma Client
+//                             nem olvassa/irja, a pull $queryRaw-val, CAST(version
+//                             AS bigint)-kent olvassa. Az SQL Server minden
+//                             INSERT/UPDATE-nel magatol noveli.
+//                             "timestamp" = a rowversion regi neve; az SQL Server
+//                             igy adja vissza, ezert a Prisma csak ezzel a nevvel
+//                             nem lat elterest (drift). A @default(dbgenerated())
+//                             miatt a create() mukodik, az erteket a DB adja.
+//   deletedAt               - tombstone (soft delete); NULL = el. Az isDeleted
+//                             helyett a szinkronizalt tablakon.
+//   lastModifiedByDeviceId  - melyik eszkoz irta utoljara (visszhang szures)
+//   updatedAt               - marad, csak naplozasra
+// A szerveren a meglevo synced mezo mindig true; ertelme csak a mobil SQLite-ban van.
+//
+// Jogosultsag: a COMPANY_MEMBER a ceg osszes jarmuvet latja es barmelyikhez
+// rogzithet, de csak a sajat bejegyzeseit szerkesztheti/torolheti. Ehhez minden
+// bejegyzes kap egy createdByUserId mezot (a gyerektablak - MaintenanceOperation,
+// ObdErrorCode - a szulojuket kovetik). A Vehicle-nel ezt az ownerUserId adja.
+ 
 generator client {
   provider = "prisma-client-js"
 }
-
+ 
 datasource db {
   provider = "sqlserver"
   url      = env("DATABASE_URL")
 }
-
+ 
 // ---------- FELHASZNALOK / CEGEK ----------
 // UserRole ertekek: "PRIVATE" | "COMPANY_ADMIN" | "COMPANY_MEMBER"
-
+ 
 model Company {
   id        String   @id @default(uuid())
   name      String
@@ -29,11 +53,11 @@ model Company {
   isDeleted Boolean  @default(false) @map("is_deleted")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-
+ 
   users     User[]
   vehicles  Vehicle[]
 }
-
+ 
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -46,35 +70,50 @@ model User {
   isDeleted    Boolean  @default(false) @map("is_deleted")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
-
+ 
   vehicles      Vehicle[]
   refreshTokens RefreshToken[]
   notifications Notification[]
-  vehicleEvents VehicleEvent[]
-  attachments   Attachment[]
+  syncMutations SyncMutation[]
+ 
+  // a felhasznalo altal rogzitett bejegyzesek (createdByUserId)
+  maintenanceLogs MaintenanceLog[]
+  fuelLogs        FuelLog[]
+  insurances      Insurance[]
+  vehicleTaxes    VehicleTax[]
+  obdScans        ObdScan[]
+  aiDiagnostics   AiDiagnostic[]
+  vehicleEvents   VehicleEvent[]
+  attachments     Attachment[]
 }
-
+ 
+// A token nyers erteke soha nem kerul az adatbazisba: tokenHash = SHA-256 (hex).
+// Rotacio: sikeres /auth/refresh utan a regi sor revoked = true, uj sor ugyanarra
+// a deviceId-ra. Visszavont token ujrafelhasznalasakor a user osszes tokenje visszavonodik.
 model RefreshToken {
   id        String   @id @default(uuid())
-  token     String   @unique
+  tokenHash String   @unique @db.NVarChar(64)
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  deviceId  String?  @db.NVarChar(64)
   expiresAt DateTime
   revoked   Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+ 
+  @@index([userId])
 }
-
+ 
 // ---------- JARMU ----------
 // FuelType ertekek: "GASOLINE" | "DIESEL" | "ELECTRIC" | "HYBRID" | "LPG"
-
+ 
 model Vehicle {
   id             String    @id @default(uuid())
   ownerUserId    String
   owner          User      @relation(fields: [ownerUserId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   companyId      String?
   company        Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull, onUpdate: NoAction)
-
+ 
   make           String
   model          String
   year           Int
@@ -84,11 +123,15 @@ model Vehicle {
   fuelType       String    @default("GASOLINE") // "GASOLINE" | "DIESEL" | "ELECTRIC" | "HYBRID" | "LPG"
   currentMileage Int       @default(0)
   purchaseDate   DateTime?
-
-  isDeleted      Boolean   @default(false) @map("is_deleted")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
   maintenanceLogs        MaintenanceLog[]
   maintenancePredictions MaintenancePrediction[]
   fuelLogs                FuelLog[]
@@ -99,12 +142,15 @@ model Vehicle {
   notifications            Notification[]
   events                   VehicleEvent[]
   attachments              Attachment[]
+ 
+  @@index([ownerUserId, version])
+  @@index([companyId])
 }
-
+ 
 // ---------- KARBANTARTAS ----------
 // MaintenanceType ertekek: "OIL_CHANGE" | "TIRE_ROTATION" | "TIRE_REPLACEMENT" |
 //   "BRAKE_SERVICE" | "BATTERY" | "FILTER_CHANGE" | "INSPECTION" | "OTHER"
-
+ 
 // Egy szervizlatogatas (datum + km-allas). A tenyleges elvegzett
 // muveleteket a MaintenanceOperation sorolja fel - egy latogataskor
 // tobb fele is lehet (pl. olajcsere + fekbetet csere egyszerre).
@@ -115,179 +161,255 @@ model MaintenanceLog {
   id               String   @id @default(uuid())
   vehicleId        String
   vehicle          Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
+  createdByUserId  String
+  createdBy        User     @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+ 
   serviceDate      DateTime
   mileageAtService Int
   totalCost        Decimal? @db.Decimal(10, 2) // cache - app-oldalon tartjuk szinkronban az operations.cost sum-javal
   notes            String?
-
-  synced           Boolean  @default(true) // offline-first: false amig nincs feltoltve
-  isDeleted        Boolean  @default(false) @map("is_deleted")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-
+ 
+  synced           Boolean  @default(true) // a szerveren mindig true; ertelme csak a mobil SQLite-ban van
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
   operations       MaintenanceOperation[]
   attachments      Attachment[]
+ 
+  @@index([vehicleId, version])
 }
-
+ 
 // Egy konkret muvelet (tipus + koltseg) egy MaintenanceLog-on belul.
+// Szerzoje a szulo MaintenanceLog szerzoje.
 model MaintenanceOperation {
   id               String         @id @default(uuid())
   maintenanceLogId String
   maintenanceLog   MaintenanceLog @relation(fields: [maintenanceLogId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
+ 
   type             String // "OIL_CHANGE" | "TIRE_ROTATION" | "TIRE_REPLACEMENT" | "BRAKE_SERVICE" | "BATTERY" | "FILTER_CHANGE" | "INSPECTION" | "OTHER"
   cost             Decimal?       @db.Decimal(10, 2)
   notes            String?
-
-  isDeleted        Boolean        @default(false) @map("is_deleted")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
-
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
   @@index([maintenanceLogId, type])
+  @@index([maintenanceLogId, version])
 }
-
+ 
 // PredictionStatus ertekek: "PENDING" | "NOTIFIED" | "COMPLETED" | "DISMISSED"
-
+ 
 // predictedDueDate / predictedDueMileage: mindket mezo nullable, mert
 // egy predikcio lehet csak ido- vagy csak km-alapu (pl. muszaki vizsga
 // = csak datum, olajcsere-emlekezteto = csak km). Az app-reteg
 // biztositja, hogy legalabb egyik ki legyen toltve.
+// A szerver generalja; a kliens szinkronban csak a status mezot modosithatja.
 model MaintenancePrediction {
   id                  String    @id @default(uuid())
   vehicleId           String
   vehicle             Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
+ 
   maintenanceType     String // lasd MaintenanceType ertekek fent
   predictedDueDate    DateTime?
   predictedDueMileage Int?
   status              String    @default("PENDING") // "PENDING" | "NOTIFIED" | "COMPLETED" | "DISMISSED"
-
-  isDeleted           Boolean   @default(false) @map("is_deleted")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
+  @@index([vehicleId, version])
 }
-
+ 
 // ---------- UZEMANYAG ----------
 // FuelUnit ertekek: "LITER" | "KWH" | "GALLON"
-
+ 
 model FuelLog {
-  id        String   @id @default(uuid())
-  vehicleId String
-  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
+  id              String   @id @default(uuid())
+  vehicleId       String
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdByUserId String
+  createdBy       User     @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+ 
   date      DateTime
   mileage   Int
   quantity  Decimal  @db.Decimal(8, 2)
   unit      String   @default("LITER") // "LITER" | "KWH" | "GALLON"
   cost      Decimal  @db.Decimal(10, 2)
   fullTank  Boolean  @default(true)
-
+ 
   synced    Boolean  @default(true)
-  isDeleted Boolean  @default(false) @map("is_deleted")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
+  @@index([vehicleId, version])
 }
-
+ 
 // ---------- BIZTOSITAS / UTADO ----------
-
+ 
 model Insurance {
-  id           String   @id @default(uuid())
-  vehicleId    String
-  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
+  id              String   @id @default(uuid())
+  vehicleId       String
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdByUserId String
+  createdBy       User     @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+ 
   provider     String
   policyNumber String
   startDate    DateTime
   endDate      DateTime
   cost         Decimal  @db.Decimal(10, 2)
-
-  isDeleted    Boolean  @default(false) @map("is_deleted")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
+  @@index([vehicleId, version])
 }
-
+ 
 // Kocsi-kategoria szerint valtozo rovinietta kategoriak (A-H).
 // VehicleTaxCategory ertekek: "CATEGORY_A".."CATEGORY_H" | "OTHER"
-
+ 
 // Nincs unique constraint (vehicleId, year, category) kombinacion:
 // szandekosan, mert egy even belul tobb, rovidebb idotartamra szolo
 // rovinietta is vasarolhato ugyanahhoz a jarmuhoz.
 model VehicleTax {
-  id        String   @id @default(uuid())
-  vehicleId String
-  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
+  id              String   @id @default(uuid())
+  vehicleId       String
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdByUserId String
+  createdBy       User     @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+ 
   category  String // "CATEGORY_A".."CATEGORY_H" | "OTHER"
   year      Int
   amount    Decimal  @db.Decimal(10, 2)
   dueDate   DateTime
   paid      Boolean  @default(false)
-
-  isDeleted Boolean  @default(false) @map("is_deleted")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
+  @@index([vehicleId, version])
 }
-
+ 
 // ---------- OBD2 ----------
 // Severity ertekek: "INFO" | "WARNING" | "CRITICAL"
-
+ 
 model ObdScan {
-  id         String         @id @default(uuid())
-  vehicleId  String
-  vehicle    Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
+  id              String         @id @default(uuid())
+  vehicleId       String
+  vehicle         Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdByUserId String
+  createdBy       User           @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+ 
   scanDate   DateTime       @default(now())
   rawData    String?        @db.NVarChar(Max)
-
-  isDeleted  Boolean        @default(false) @map("is_deleted")
-  createdAt  DateTime       @default(now()) @map("created_at")
-  updatedAt  DateTime       @updatedAt @map("updated_at")
-
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
   errorCodes ObdErrorCode[]
+ 
+  @@index([vehicleId, version])
 }
-
+ 
+// Szerzoje a szulo ObdScan szerzoje.
 model ObdErrorCode {
   id          String   @id @default(uuid())
   obdScanId   String
   obdScan     ObdScan  @relation(fields: [obdScanId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
+ 
   code        String
   description String?
   severity    String   @default("INFO") // "INFO" | "WARNING" | "CRITICAL"
-
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
+  @@index([obdScanId, version])
 }
-
+ 
 // ---------- AI DIAGNOSZTIKA ----------
-
+// Csak pull: letrehozasa online REST hivas.
+ 
 model AiDiagnostic {
-  id         String   @id @default(uuid())
-  vehicleId  String
-  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
+  id              String   @id @default(uuid())
+  vehicleId       String
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdByUserId String
+  createdBy       User     @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+ 
   prompt     String?
   aiResponse String   @db.NVarChar(Max)
-
-  isDeleted  Boolean  @default(false) @map("is_deleted")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
   attachments Attachment[]
+ 
+  @@index([vehicleId, version])
 }
-
+ 
 // ---------- CSATOLMANYOK ----------
 // MediaType ertekek: "IMAGE" | "VIDEO"
 // UploadStatus ertekek: "PENDING" | "UPLOADED" | "FAILED"
-
+//
+// A fajl a backend lemezen van (pl. uploads/<vehicleId>/<id>.<ext>), a
+// storageKey ezt a relativ utat tartalmazza. A metaadat a /sync-kel megy,
+// a fajl kulon: PUT /attachments/:id/content.
+ 
 model Attachment {
-  id         String   @id @default(uuid()) // a mobilapp generálja (offline)
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  vehicleId  String
-  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
+  id              String   @id @default(uuid()) // a mobilapp generálja (offline)
+  createdByUserId String
+  createdBy       User     @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vehicleId       String
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+ 
   // pontosan egy legyen kitöltve (ezt az app-réteg ellenőrzi)
   maintenanceLogId String?
   maintenanceLog   MaintenanceLog? @relation(fields: [maintenanceLogId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -295,20 +417,24 @@ model Attachment {
   vehicleEvent     VehicleEvent?   @relation(fields: [vehicleEventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   aiDiagnosticId   String?
   aiDiagnostic     AiDiagnostic?   @relation(fields: [aiDiagnosticId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
+ 
   mediaType  String // "IMAGE" | "VIDEO"
   mimeType   String
   sizeBytes  Int
   storageKey String?                 // üres, amíg nincs feltöltve
   status     String   @default("PENDING") // "PENDING" | "UPLOADED" | "FAILED"
-
-  isDeleted  Boolean  @default(false) @map("is_deleted")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  @@index([vehicleId])
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
+  @@index([vehicleId, version])
 }
-
+ 
 // ---------- ALTALANOS ESEMENYNAPLO ----------
 // Szabad "type" mezo (nem enum), hogy meg nem implementalt kovetesi
 // igenyeket (pl. olajszint, regeneracio, egyeb megjegyzesek) fel
@@ -319,42 +445,82 @@ model Attachment {
 // Insurance.cost + VehicleTax.amount + VehicleEvent.amount
 // aggregalasaval all ossze a backend oldalon.
 model VehicleEvent {
-  id        String   @id @default(uuid())
-  vehicleId String
-  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
+  id              String   @id @default(uuid())
+  vehicleId       String
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdByUserId String
+  createdBy       User     @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+ 
   type      String // pl. "oil_level", "regeneration", "parking", stb. - app-oldalon ertelmezve
   note      String?
   amount    Decimal? @db.Decimal(10, 2)
-
+ 
   synced    Boolean  @default(true)
-  isDeleted Boolean  @default(false) @map("is_deleted")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
   attachments Attachment[]
-
+ 
   @@index([vehicleId, type])
+  @@index([vehicleId, version])
 }
-
+ 
 // ---------- ERTESITESEK ----------
 // NotificationType ertekek: "MAINTENANCE_DUE" | "WEEKLY_MILEAGE" | "INSURANCE_EXPIRY" | "TAX_DUE" | "OBD_ALERT"
-
+// A szerver generalja; a kliens szinkronban csak a read mezot modosithatja.
+ 
 model Notification {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   vehicleId String?
   vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
+ 
   type      String // "MAINTENANCE_DUE" | "WEEKLY_MILEAGE" | "INSURANCE_EXPIRY" | "TAX_DUE" | "OBD_ALERT"
   message   String
   sentAt    DateTime?
   read      Boolean  @default(false)
-
-  isDeleted Boolean  @default(false) @map("is_deleted")
-  createdAt DateTime @default(now()) @map("created_at")
+ 
+  // szinkron
+  clientUpdatedAt        DateTime                  @default(now())
+  version                Unsupported("timestamp") @default(dbgenerated())
+  deletedAt              DateTime?
+  lastModifiedByDeviceId String?                   @db.NVarChar(64)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+ 
+  @@index([userId, version])
+}
+ 
+// ---------- SZINKRON SEGEDTABLAK ----------
+ 
+// Idempotencia: minden feldolgozott push mutation eredmenye 30 napig.
+// Ha ugyanaz a mutationId ujra jon, a tarolt eredmenyt adjuk vissza (DUPLICATE).
+model SyncMutation {
+  mutationId String   @id // a kliens generalja (UUID)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  deviceId   String?  @db.NVarChar(64)
+  entity     String   @db.NVarChar(64) // pl. "FuelLog"
+  entityId   String
+  result     String   @db.NVarChar(Max) // a push valasz eredmenye JSON-kent
+  createdAt  DateTime @default(now()) @map("created_at")
+ 
+  @@index([createdAt]) // 30 napos takaritashoz
+}
+ 
+// Kulcs-ertek tabla a szerver oldali szinkron allapothoz, pl.
+// "purgedVersion" = a tombstone takaritas soran fizikailag torolt legnagyobb
+// version; ennel regebbi since-ra a pull 410 SYNC_RESET_REQUIRED-et ad.
+model SyncState {
+  key       String   @id @db.NVarChar(64)
+  value     String
   updatedAt DateTime @updatedAt @map("updated_at")
 }
+ 

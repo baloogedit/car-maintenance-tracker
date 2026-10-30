@@ -73,6 +73,7 @@ async function main() {
   await prisma.maintenanceLog.create({
     data: {
       vehicleId: golf.id,
+      createdByUserId: privateUser.id,
       serviceDate: new Date('2026-03-15'),
       mileageAtService: 175000,
       totalCost: 740, // RON
@@ -100,6 +101,7 @@ async function main() {
     data: [
       {
         vehicleId: golf.id,
+        createdByUserId: privateUser.id,
         date: new Date('2026-09-01'),
         mileage: 180500,
         quantity: 45.2,
@@ -107,6 +109,7 @@ async function main() {
       },
       {
         vehicleId: golf.id,
+        createdByUserId: privateUser.id,
         date: new Date('2026-09-20'),
         mileage: 181300,
         quantity: 38.7,
@@ -118,6 +121,7 @@ async function main() {
   await prisma.insurance.create({
     data: {
       vehicleId: golf.id,
+      createdByUserId: privateUser.id,
       provider: 'Teszt Biztosito Zrt.',
       policyNumber: 'POL-2026-001',
       startDate: new Date('2026-01-01'),
@@ -129,6 +133,7 @@ async function main() {
   await prisma.vehicleTax.create({
     data: {
       vehicleId: transit.id,
+      createdByUserId: companyAdmin.id,
       category: 'CATEGORY_B',
       year: 2026,
       amount: 550,
@@ -139,6 +144,7 @@ async function main() {
   await prisma.obdScan.create({
     data: {
       vehicleId: golf.id,
+      createdByUserId: privateUser.id,
       errorCodes: {
         create: [
           {code: 'P0299', description: 'Turbo alultoltes', severity: 'WARNING'},
@@ -151,7 +157,7 @@ async function main() {
   await prisma.vehicleEvent.create({
     data: {
       vehicleId: golf.id,
-      userId: privateUser.id,
+      createdByUserId: privateUser.id,
       type: 'parking',
       note: 'Belvarosi parkolo',
       amount: 15,
