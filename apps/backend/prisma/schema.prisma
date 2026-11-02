@@ -50,6 +50,8 @@ model Company {
   id        String   @id @default(uuid())
   name      String
   taxId     String?  @unique
+  // csatlakozasi kod: ezzel lep be egy maganszemely a cegbe tagkent
+  joinCode  String   @unique @default(nanoid(10)) @db.NVarChar(16)
   isDeleted Boolean  @default(false) @map("is_deleted")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
