@@ -83,7 +83,8 @@ export class TokenService {
     });
   }
 
-  private async revokeAllForUser(userId: string): Promise<void> {
+  // A felhasznalo osszes eszkozenek kileptetese (pl. cegbol eltavolitaskor).
+  async revokeAllForUser(userId: string): Promise<void> {
     await this.prisma.refreshToken.updateMany({
       where: {userId, revoked: false},
       data: {revoked: true},

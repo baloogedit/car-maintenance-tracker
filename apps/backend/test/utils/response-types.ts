@@ -17,3 +17,9 @@ export interface CompanyBody {
   name: string;
   joinCode: string | null;
 }
+
+export interface MemberBody {
+  id: string;
+  email: string;
+  role: string;
+}
