@@ -1,0 +1,9 @@
+{
+  // A jest (ts-jest) ezt hasznalja. A TypeScript 6 megkoveteli a rootDir-t, ha a
+  // forrasok tobb mappaban vannak (src + test); a build (tsconfig.build.json)
+  // erintetlen marad, igy a dist/main.js utvonal sem valtozik.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "."
+  }
+}
