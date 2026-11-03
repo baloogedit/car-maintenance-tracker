@@ -49,7 +49,7 @@ datasource db {
 model Company {
   id        String   @id @default(uuid())
   name      String
-  taxId     String?  @unique
+  taxId     String?
   // csatlakozasi kod: ezzel lep be egy maganszemely a cegbe tagkent
   joinCode  String   @unique @default(nanoid(10)) @db.NVarChar(16)
   isDeleted Boolean  @default(false) @map("is_deleted")
@@ -119,7 +119,7 @@ model Vehicle {
   make           String
   model          String
   year           Int
-  vin            String?   @unique
+  vin            String?
   licensePlate   String?
   engineType     String?
   fuelType       String    @default("GASOLINE") // "GASOLINE" | "DIESEL" | "ELECTRIC" | "HYBRID" | "LPG"

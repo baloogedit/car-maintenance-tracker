@@ -57,6 +57,23 @@ describe('Vehicles (e2e)', () => {
     expect(row?.deletedAt).not.toBeNull();
   });
 
+  it('tobb VIN nelkuli jarmu is lehet, de ket egyforma VIN -> 409', async () => {
+    const auth = bearer(accessToken);
+    const vin = `E2E${Date.now()}`.padEnd(17, '0').slice(0, 17);
+    for (const body of [
+      {make: 'Skoda', model: 'Fabia', year: 2010},
+      {make: 'Skoda', model: 'Octavia', year: 2011},
+      {make: 'Skoda', model: 'Superb', year: 2012, vin},
+    ]) {
+      await request(app.getHttpServer()).post(`${API}/vehicles`).set(auth).send(body).expect(201);
+    }
+    await request(app.getHttpServer())
+      .post(`${API}/vehicles`)
+      .set(auth)
+      .send({make: 'Skoda', model: 'Kodiaq', year: 2020, vin})
+      .expect(409);
+  });
+
   it('idegen es hibas id -> 404', async () => {
     const foreign = await prisma.vehicle.findFirstOrThrow({
       where: {owner: {email: SEED_USERS.otherPrivate}},
