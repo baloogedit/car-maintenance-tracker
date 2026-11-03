@@ -4,31 +4,44 @@ Diplomamunka projekt — mobil alkalmazás gépjárművek karbantartásának, ü
 
 ## Tech stack
 
-| Réteg           | Technológia                                                              |
-| --------------- | ------------------------------------------------------------------------ |
-| Mobil frontend  | React Native + TypeScript, Expo (Custom Development Client), Expo Router |
-| Backend         | NestJS + TypeScript                                                      |
-| ORM             | Prisma                                                                   |
-| Adatbázis       | SQL Server 2025 Express                                                  |
-| Offline tárolás | SQLite (mobil kliens oldalon)                                            |
-| API             | REST / JSON                                                              |
-| Autentikáció    | JWT + refresh token                                                      |
+| Réteg           | Technológia                                                                   |
+| --------------- | ----------------------------------------------------------------------------- |
+| Mobil frontend  | React Native + TypeScript, Expo (Custom Development Client), Expo Router      |
+| Backend         | NestJS 12 + TypeScript, Swagger (OpenAPI) dokumentáció                        |
+| ORM             | Prisma 6                                                                      |
+| Adatbázis       | SQL Server 2025 Express                                                       |
+| Offline tárolás | SQLite (mobil kliens oldalon), szinkronizálás a backenddel                    |
+| API             | REST / JSON, `/api/v1` előtaggal                                              |
+| Autentikáció    | JWT access token (30 perc) + rotált refresh token (60 nap, hash-elve tárolva) |
 
 ## Monorepo struktúra
 
 ```
 car-maintenance-tracker/
 ├── apps/
-│   ├── backend/        NestJS API + Prisma schema
+│   ├── backend/        NestJS API + Prisma séma (felépítés: apps/backend/KONVENCIOK.md)
 │   └── mobile/         Expo / React Native mobil app
 ├── eslint.config.base.mjs   közös ESLint alapkonfiguráció
 ├── .prettierrc.cjs           közös Prettier konfiguráció
 └── package.json              workspace gyökér (npm workspaces)
 ```
 
+### Backend felépítése
+
+```
+apps/backend/src/
+├── auth/        regisztráció, belépés, token frissítés és kijelentkezés
+├── company/     cég létrehozása, csatlakozás csatlakozási kóddal
+├── health/      GET /health
+├── vehicle/     járművek (CRUD, soft delete)
+└── shared/      közös elemek: config, guardok, dekorátorok, jogosultsági szabályok, adatbázis
+```
+
+Minden funkció saját mappát kap, `dto/input`, `dto/output` és `mapper/` almappákkal. A részletes szabályok (mappaszerkezet, elnevezések, új funkció felvétele) az [`apps/backend/KONVENCIOK.md`](apps/backend/KONVENCIOK.md) fájlban vannak.
+
 ## Előfeltételek
 
-- Node.js (LTS) és npm
+- Node.js 22 vagy újabb és npm (a backend tesztjeihez **Node 24.9+** kell)
 - SQL Server 2025 Express (lokálisan telepítve, vagy elérhető instance)
 - Expo CLI használatához: Android Studio / Xcode, vagy fizikai eszköz az Expo Go / Dev Client-hez
 
@@ -40,7 +53,22 @@ cd car-maintenance-tracker
 npm install
 ```
 
-Az `apps/backend` alatt hozz létre egy `.env` fájlt a saját SQL Server kapcsolati adataiddal (lásd `apps/backend/.env.example`, ha van, vagy a Prisma `DATABASE_URL` formátumát).
+Az `apps/backend` alatt hozz létre egy `.env` fájlt az `apps/backend/.env.example` alapján:
+
+| Változó                  | Leírás                                                    |
+| ------------------------ | --------------------------------------------------------- |
+| `DATABASE_URL`           | SQL Server kapcsolati szöveg (Prisma formátum)            |
+| `JWT_ACCESS_SECRET`      | hosszú, véletlen titkos kulcs az access token aláírásához |
+| `JWT_ACCESS_EXPIRES_IN`  | az access token élettartama, pl. `30m`                    |
+| `JWT_REFRESH_EXPIRES_IN` | a refresh token élettartama, pl. `60d`                    |
+
+Titkos kulcs generálása:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+A backend induláskor ellenőrzi a kötelező változókat, és ha valamelyik hiányzik, érthető hibával leáll.
 
 ## Fejlesztés közben használt parancsok
 
@@ -60,11 +88,46 @@ A gyökérből futtatva (npm workspaces segítségével mindkét app-ot eléri):
 
 ## Adatbázis (Prisma)
 
+Az `apps/backend` mappában:
+
 ```bash
-cd apps/backend
-npx prisma migrate dev --name init
-npx prisma db seed
-npx prisma studio   -> Adatbázis modellek vizuális megjelenítése és szerkesztése
+npx prisma migrate deploy   # a migrációk alkalmazása
+npx prisma generate         # a Prisma kliens újragenerálása (sémaváltozás után)
+npm run seed                # alap tesztadatok (mindent töröl előtte)
+npm run seed:2              # bővebb tesztadatok (cégek, több jármű), újrafuttatható
+npx prisma studio           # adatbázis modellek vizuális megjelenítése és szerkesztése
+```
+
+Minden seed felhasználó jelszava `Teszt1234!`. Például: `magan@teszt.hu` (magánszemély), `fanni@seed2.teszt.hu` (céges admin), `gabor@seed2.teszt.hu` (cégtag).
+
+## API kipróbálása
+
+A backend elindítása után (`npm run dev:backend`):
+
+- **Swagger UI:** http://localhost:3000/api/docs — belépés után az `accessToken`-t az **Authorize** gombnál kell megadni.
+- **Health:** http://localhost:3000/api/v1/health
+
+| Végpont                                       | Mit csinál                                            |
+| --------------------------------------------- | ----------------------------------------------------- |
+| `POST /auth/register`, `/login`               | regisztráció és belépés, tokenpárt ad vissza          |
+| `POST /auth/refresh`, `/logout`               | token frissítés (rotáció) és kijelentkezés            |
+| `GET /auth/me`                                | a saját profil                                        |
+| `POST /companies`                             | cég létrehozása, a létrehozó lesz az admin            |
+| `POST /companies/join`                        | csatlakozás egy céghez a csatlakozási kóddal          |
+| `GET /companies/me`                           | a saját cég (a kódot csak az admin látja)             |
+| `POST /companies/me/join-code`                | új csatlakozási kód (csak admin)                      |
+| `GET`, `POST /vehicles`                       | a látható járművek listája, új jármű                  |
+| `GET`, `PATCH`, `DELETE /vehicles/:vehicleId` | egy jármű lekérése, módosítása, törlése (soft delete) |
+
+**Jogosultságok röviden:** a magánszemély csak a saját járműveit látja. A céges felhasználók a cég összes járművét látják. A cégtag csak a saját bejegyzéseit szerkesztheti.
+
+## Tesztek
+
+Az `apps/backend` mappában (Node 24.9+ szükséges):
+
+```bash
+npm test            # egységtesztek
+npm run test:e2e    # végponttól végpontig tesztek a valódi adatbázison (előtte: npm run seed && npm run seed:2)
 ```
 
 ## Licenc
