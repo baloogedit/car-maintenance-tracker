@@ -107,19 +107,22 @@ A backend elindítása után (`npm run dev:backend`):
 - **Swagger UI:** http://localhost:3000/api/docs — belépés után az `accessToken`-t az **Authorize** gombnál kell megadni.
 - **Health:** http://localhost:3000/api/v1/health
 
-| Végpont                                       | Mit csinál                                            |
-| --------------------------------------------- | ----------------------------------------------------- |
-| `POST /auth/register`, `/login`               | regisztráció és belépés, tokenpárt ad vissza          |
-| `POST /auth/refresh`, `/logout`               | token frissítés (rotáció) és kijelentkezés            |
-| `GET /auth/me`                                | a saját profil                                        |
-| `POST /companies`                             | cég létrehozása, a létrehozó lesz az admin            |
-| `POST /companies/join`                        | csatlakozás egy céghez a csatlakozási kóddal          |
-| `GET /companies/me`                           | a saját cég (a kódot csak az admin látja)             |
-| `POST /companies/me/join-code`                | új csatlakozási kód (csak admin)                      |
-| `GET`, `POST /vehicles`                       | a látható járművek listája, új jármű                  |
-| `GET`, `PATCH`, `DELETE /vehicles/:vehicleId` | egy jármű lekérése, módosítása, törlése (soft delete) |
+| Végpont                                         | Mit csinál                                            |
+| ----------------------------------------------- | ----------------------------------------------------- |
+| `POST /auth/register`, `/login`                 | regisztráció és belépés, tokenpárt ad vissza          |
+| `POST /auth/refresh`, `/logout`                 | token frissítés (rotáció) és kijelentkezés            |
+| `GET /auth/me`                                  | a saját profil                                        |
+| `POST /companies`                               | cég létrehozása, a létrehozó lesz az admin            |
+| `POST /companies/join`                          | csatlakozás egy céghez a csatlakozási kóddal          |
+| `GET /companies/me`                             | a saját cég (a kódot csak az admin látja)             |
+| `POST /companies/me/join-code`                  | új csatlakozási kód (csak admin)                      |
+| `POST /companies/me/leave`                      | kilépés a cégből (az utolsó admin nem léphet ki)      |
+| `GET /companies/me/members`                     | a cég tagjai (csak admin)                             |
+| `PATCH`, `DELETE /companies/me/members/:userId` | szerepkörváltás, tag eltávolítása (csak admin)        |
+| `GET`, `POST /vehicles`                         | a látható járművek listája, új jármű                  |
+| `GET`, `PATCH`, `DELETE /vehicles/:vehicleId`   | egy jármű lekérése, módosítása, törlése (soft delete) |
 
-**Jogosultságok röviden:** a magánszemély csak a saját járműveit látja. A céges felhasználók a cég összes járművét látják. A cégtag csak a saját bejegyzéseit szerkesztheti.
+**Jogosultságok röviden:** a magánszemély csak a saját járműveit látja. A céges felhasználók a cég összes járművét látják, és lehetnek saját magánjárműveik is (`isCompanyVehicle: false`), amiket a cég nem lát. A cégtag csak a saját bejegyzéseit szerkesztheti. A szerepkört és a cégtagságot a backend minden kérésnél az adatbázisból ellenőrzi.
 
 ## Tesztek
 
