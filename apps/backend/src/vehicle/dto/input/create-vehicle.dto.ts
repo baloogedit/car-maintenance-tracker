@@ -1,6 +1,7 @@
 import {ApiProperty, ApiPropertyOptional} from '@nestjs/swagger';
 import {Type} from 'class-transformer';
 import {
+  IsBoolean,
   IsDate,
   IsEnum,
   IsInt,
@@ -84,4 +85,13 @@ export class CreateVehicleDto {
   @Type(() => Date)
   @IsDate()
   purchaseDate?: Date;
+
+  @ApiPropertyOptional({
+    description:
+      'Csak ceges felhasznalonal szamit: true (alapertelmezes) = ceges jarmu, ' +
+      'false = sajat maganjarmu, amit a ceg nem lat.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isCompanyVehicle?: boolean;
 }

@@ -13,6 +13,9 @@ import {JwtPayload} from '../interfaces/jwt-payload.interface';
 //   COMPANY_ADMIN   - a sajat jarmuvei + a ceg osszes jarmuve
 //   COMPANY_MEMBER  - ugyanaz, mint az admin: a ceg osszes jarmuvet latja,
 //                     es barmelyikhez rogzithet
+// Uj jarmu:
+//   a ceges felhasznalo (admin es tag is) valaszthat: ceges jarmu (alapertelmezes)
+//   vagy sajat maganjarmu. A maganjarmuvet a ceg tobbi tagja es az admin sem latja.
 // Szerkesztes/torles:
 //   jarmu           - a tulajdonos, vagy ceges jarmunel a COMPANY_ADMIN
 //   bejegyzes       - a szerzoje (createdByUserId); a jarmu tulajdonosa es
@@ -46,6 +49,13 @@ export function canEditEntry(
   if (entry.createdByUserId === user.sub) return true;
   if (user.role === UserRole.COMPANY_MEMBER) return false;
   return canEditVehicle(user, vehicle);
+}
+
+// Az uj jarmu cegbe kerul-e: ceges felhasznalonal alapbol igen, de kerheti, hogy
+// maganjarmu legyen. Maganszemely jarmuve mindig maganjarmu.
+export function isNewVehicleForCompany(user: JwtPayload, isCompanyVehicle?: boolean): boolean {
+  if (user.role === UserRole.PRIVATE || user.companyId === null) return false;
+  return isCompanyVehicle ?? true;
 }
 
 function isCompanyAdminOf(user: JwtPayload, companyId: string | null): boolean {

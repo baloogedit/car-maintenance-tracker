@@ -1,11 +1,13 @@
 import {Injectable} from '@nestjs/common';
 import {Vehicle} from '@prisma/client';
 
-import {UserRole} from '../shared/enums/user-role.enum';
 import {JwtPayload} from '../shared/interfaces/jwt-payload.interface';
 import {AccessService} from '../shared/modules/access/access.service';
 import {PrismaService} from '../shared/modules/db/prisma.service';
-import {visibleVehiclesWhere} from '../shared/policies/vehicle-access.policy';
+import {
+  isNewVehicleForCompany,
+  visibleVehiclesWhere,
+} from '../shared/policies/vehicle-access.policy';
 import {VehicleDeletionService} from './deletion/vehicle-deletion.service';
 import {CreateVehicleDto} from './dto/input/create-vehicle.dto';
 import {UpdateVehicleDto} from './dto/input/update-vehicle.dto';
@@ -32,14 +34,15 @@ export class VehicleService {
     return toVehicleResponse(vehicle);
   }
 
-  // Ceges felhasznalo jarmuve automatikusan a cegehez tartozik, igy a ceg
-  // tobbi tagja is latja.
+  /// Ceges felhasznalo jarmuve alapbol a cegehez tartozik (igy a ceg tobbi tagja
+  // is latja), de kerheti, hogy sajat maganjarmu legyen (isCompanyVehicle: false).
   async create(user: JwtPayload, dto: CreateVehicleDto): Promise<VehicleResponseDto> {
+    const {isCompanyVehicle, ...data} = dto;
     const vehicle = await this.prisma.vehicle.create({
       data: {
-        ...dto,
+        ...data,
         ownerUserId: user.sub,
-        companyId: user.role === UserRole.PRIVATE ? null : user.companyId,
+        companyId: isNewVehicleForCompany(user, isCompanyVehicle) ? user.companyId : null,
         clientUpdatedAt: new Date(),
       },
     });
