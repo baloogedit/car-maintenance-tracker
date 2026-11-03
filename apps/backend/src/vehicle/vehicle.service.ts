@@ -34,7 +34,7 @@ export class VehicleService {
     return toVehicleResponse(vehicle);
   }
 
-  /// Ceges felhasznalo jarmuve alapbol a cegehez tartozik (igy a ceg tobbi tagja
+  // Ceges felhasznalo jarmuve alapbol a cegehez tartozik (igy a ceg tobbi tagja
   // is latja), de kerheti, hogy sajat maganjarmu legyen (isCompanyVehicle: false).
   async create(user: JwtPayload, dto: CreateVehicleDto): Promise<VehicleResponseDto> {
     const {isCompanyVehicle, ...data} = dto;

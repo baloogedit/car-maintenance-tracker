@@ -11,7 +11,7 @@ import {PrismaService} from '../modules/db/prisma.service';
 // Globalis guard (APP_GUARD): az "Authorization: Bearer <access token>" fejlecet
 // ellenorzi. A @Public() vegpontokat atengedi.
 //
-// / A szerepkort es a ceget NEM a tokenbol veszi, hanem az adatbazisbol: igy a cegbol kilepett
+// A szerepkort es a ceget NEM a tokenbol veszi, hanem az adatbazisbol: igy a cegbol kilepett
 // vagy eltavolitott felhasznalo a meg ervenyes (legfeljebb 30 perces)
 // access tokenjevel sem latja tovabb a ceg adatait, es a torolt felhasznalo azonnal kizarodik.
 // Ez keresenkent egy rovid lekerdezes.
