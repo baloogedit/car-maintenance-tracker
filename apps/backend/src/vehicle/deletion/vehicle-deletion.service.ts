@@ -27,6 +27,18 @@ export class VehicleDeletionService {
         where: {obdScan: {vehicleId}, ...NOT_DELETED},
         data: tombstone,
       }),
+      // a csatolmanynak nincs vehicleId-ja: a szulojen (log/esemeny/AI) at tartozik a jarmuhoz
+      this.prisma.attachment.updateMany({
+        where: {
+          ...NOT_DELETED,
+          OR: [
+            {maintenanceLog: {vehicleId}},
+            {vehicleEvent: {vehicleId}},
+            {aiDiagnostic: {vehicleId}},
+          ],
+        },
+        data: tombstone,
+      }),
       this.prisma.maintenanceLog.updateMany({where: byVehicle, data: tombstone}),
       this.prisma.maintenancePrediction.updateMany({where: byVehicle, data: tombstone}),
       this.prisma.fuelLog.updateMany({where: byVehicle, data: tombstone}),
@@ -34,7 +46,6 @@ export class VehicleDeletionService {
       this.prisma.vehicleTax.updateMany({where: byVehicle, data: tombstone}),
       this.prisma.obdScan.updateMany({where: byVehicle, data: tombstone}),
       this.prisma.aiDiagnostic.updateMany({where: byVehicle, data: tombstone}),
-      this.prisma.attachment.updateMany({where: byVehicle, data: tombstone}),
       this.prisma.vehicleEvent.updateMany({where: byVehicle, data: tombstone}),
       this.prisma.notification.updateMany({where: byVehicle, data: tombstone}),
       this.prisma.vehicle.update({where: {id: vehicleId}, data: tombstone}),

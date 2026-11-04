@@ -9,10 +9,11 @@
 // ugyanazokat a sorokat kapod. Az id-kat itt generaljuk (randomUUID), hogy a
 // gyerektablakat gyors createMany-vel lehessen feltolteni.
 //
-// Minden osszeg RON-ban van. Minden sor synced = true (alapertelmezes), es
-// minden csatolmany UPLOADED, mert ezek a kozponti adatbazisban vannak - az
-// offline/nem szinkronizalt allapot csak a mobil SQLite-ban ertelmezett.
-// A version (rowversion) mezot az SQL Server tolti ki, a clientUpdatedAt
+// Minden osszeg RON-ban van. Minden csatolmany UPLOADED, mert ezek a kozponti
+// adatbazisban vannak - az offline/nem szinkronizalt allapot csak a mobil
+// SQLite-ban ertelmezett.
+//
+// // A version (rowversion) mezot az SQL Server tolti ki, a clientUpdatedAt
 // alapertelmezese now(), a deletedAt NULL - ezeket itt nem kell megadni.
 //
 // Szerzo (createdByUserId): maganszemelynel mindig a tulajdonos. Ceges jarmunel
@@ -20,10 +21,11 @@
 // "tag csak a sajat bejegyzeset szerkesztheti" szabalyt ki lehessen probalni.
 // A biztositas, utado es AI diagnosztika szerzoje a tulajdonos.
 
+import 'dotenv/config';
+
 import {PrismaClient} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import {createHash, randomUUID} from 'crypto';
-import 'dotenv/config';
 
 const prisma = new PrismaClient();
 
@@ -289,8 +291,16 @@ async function cleanup() {
   await prisma.notification.deleteMany({
     where: {OR: [{userId: {in: userIds}}, {vehicleId: {in: vehicleIds}}]},
   });
+  // a csatolmany a szulojen (log/esemeny/AI) at tartozik userhez es jarmuhoz
+  const byUserOrVehicle = {OR: [{createdByUserId: {in: userIds}}, {vehicleId: {in: vehicleIds}}]};
   await prisma.attachment.deleteMany({
-    where: {OR: [{createdByUserId: {in: userIds}}, {vehicleId: {in: vehicleIds}}]},
+    where: {
+      OR: [
+        {maintenanceLog: byUserOrVehicle},
+        {vehicleEvent: byUserOrVehicle},
+        {aiDiagnostic: byUserOrVehicle},
+      ],
+    },
   });
   await prisma.vehicleEvent.deleteMany({
     where: {OR: [{createdByUserId: {in: userIds}}, {vehicleId: {in: vehicleIds}}]},
@@ -410,12 +420,9 @@ async function main() {
     amount: number | null;
   }[] = [];
   const attachments: {
-    createdByUserId: string;
-    vehicleId: string;
     maintenanceLogId?: string;
     vehicleEventId?: string;
     aiDiagnosticId?: string;
-    mediaType: string;
     mimeType: string;
     sizeBytes: number;
     storageKey: string | null;
@@ -507,10 +514,7 @@ async function main() {
       });
       if (s === visitCount - 1) {
         attachments.push({
-          createdByUserId: author(s), // a szervizlog szerzoje csatolta
-          vehicleId,
           maintenanceLogId: logId,
-          mediaType: 'IMAGE',
           mimeType: 'image/jpeg',
           sizeBytes: randInt(150_000, 2_500_000),
           storageKey: `seed2/maintenance/${logId}.jpg`,
@@ -632,10 +636,7 @@ async function main() {
           'ha a lampa villog, ne terheld a motort es mielobb keress fel szervizt.',
       });
       attachments.push({
-        createdByUserId: ownerId,
-        vehicleId,
         aiDiagnosticId: diagId,
-        mediaType: i % 4 === 0 ? 'VIDEO' : 'IMAGE',
         mimeType: i % 4 === 0 ? 'video/mp4' : 'image/png',
         sizeBytes: i % 4 === 0 ? randInt(5_000_000, 40_000_000) : randInt(200_000, 3_000_000),
         storageKey: `seed2/ai/${diagId}.${i % 4 === 0 ? 'mp4' : 'png'}`,
@@ -659,10 +660,7 @@ async function main() {
       });
       if (tpl.type === 'note') {
         attachments.push({
-          createdByUserId: author(e), // az esemeny szerzoje csatolta
-          vehicleId,
           vehicleEventId: eventId,
-          mediaType: 'VIDEO',
           mimeType: 'video/mp4',
           sizeBytes: randInt(3_000_000, 25_000_000),
           storageKey: `seed2/events/${eventId}.mp4`,
