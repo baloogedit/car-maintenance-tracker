@@ -6,7 +6,7 @@ import {JwtPayload} from '../interfaces/jwt-payload.interface';
 
 // A jogosultsagi szabalyok tiszta fuggvenyekkent: nincs bennuk adatbazis-hivas,
 // ezert kulon, gyorsan tesztelhetok (vehicle-access.policy.spec.ts). A szinkron
-// is ezeket hasznalja majd.
+// is ezeket hasznalja (sync/handlers/).
 //
 // Lathatosag (olvasas + uj bejegyzes rogzitese):
 //   PRIVATE         - csak a sajat jarmuvei
@@ -34,6 +34,26 @@ export function visibleVehiclesWhere(user: JwtPayload): Prisma.VehicleWhereInput
     return {...NOT_DELETED, ...own};
   }
   return {...NOT_DELETED, OR: [own, {companyId: user.companyId}]};
+}
+
+// Ugyanaz a lathatosagi szabaly nyers SQL feltetelkent a szinkron pull-hoz
+// ($queryRaw), de a torolt jarmuvekkel egyutt, mert a tombstone-oknak is el kell
+// jutniuk a kliensre. A Vehicle tabla aliasa a lekerdezesben: v.
+export function visibleVehiclesSql(user: JwtPayload): Prisma.Sql {
+  if (user.role === UserRole.PRIVATE || !user.companyId) {
+    return Prisma.sql`v.ownerUserId = ${user.sub}`;
+  }
+  return Prisma.sql`(v.ownerUserId = ${user.sub} OR v.companyId = ${user.companyId})`;
+}
+
+// Egy mar betoltott jarmure (torolt is lehet): latja-e a felhasznalo.
+export function canSeeVehicle(user: JwtPayload, vehicle: VehicleOwnership): boolean {
+  if (vehicle.ownerUserId === user.sub) return true;
+  return (
+    user.role !== UserRole.PRIVATE &&
+    user.companyId !== null &&
+    vehicle.companyId === user.companyId
+  );
 }
 
 export function canEditVehicle(user: JwtPayload, vehicle: VehicleOwnership): boolean {
