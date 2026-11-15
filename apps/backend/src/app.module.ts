@@ -6,6 +6,7 @@ import {CompanyModule} from './company/company.module';
 import {HealthModule} from './health/health.module';
 import {validateEnv} from './shared/config/env.validation';
 import {SharedModule} from './shared/shared.module';
+import {SyncModule} from './sync/sync.module';
 import {VehicleModule} from './vehicle/vehicle.module';
 
 // A modulfa gyokere. Uj funkcio = uj feature modul a sajat mappajaban,
@@ -18,6 +19,7 @@ import {VehicleModule} from './vehicle/vehicle.module';
     CompanyModule,
     HealthModule,
     VehicleModule,
+    SyncModule,
   ],
 })
 export class AppModule {}

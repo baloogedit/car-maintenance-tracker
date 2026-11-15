@@ -3,6 +3,7 @@ import {JwtPayload} from '../interfaces/jwt-payload.interface';
 import {
   canEditEntry,
   canEditVehicle,
+  canSeeVehicle,
   isNewVehicleForCompany,
   visibleVehiclesWhere,
 } from './vehicle-access.policy';
@@ -33,6 +34,22 @@ describe('vehicle-access.policy', () => {
         deletedAt: null,
         OR: [{ownerUserId: 'gabor'}, {companyId: 'ceg1'}],
       });
+    });
+  });
+
+  describe('canSeeVehicle', () => {
+    const memberPrivateVehicle = {ownerUserId: 'gabor', companyId: null};
+
+    it('a ceg jarmuvet a ceg minden tagja latja, mas ceg adminja nem', () => {
+      expect(canSeeVehicle(member, companyVehicle)).toBe(true);
+      expect(canSeeVehicle(admin, memberVehicle)).toBe(true);
+      expect(canSeeVehicle(otherAdmin, companyVehicle)).toBe(false);
+    });
+
+    it('a maganjarmuvet csak a tulajdonosa latja', () => {
+      expect(canSeeVehicle(privateUser, privateVehicle)).toBe(true);
+      expect(canSeeVehicle(admin, memberPrivateVehicle)).toBe(false);
+      expect(canSeeVehicle(member, privateVehicle)).toBe(false);
     });
   });
 

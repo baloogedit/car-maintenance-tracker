@@ -14,6 +14,7 @@ src/
 ├── company/                     cégek: létrehozás, csatlakozás kóddal
 ├── health/                      GET /health
 ├── vehicle/                     járművek: dto/input, dto/output, mapper/, deletion/
+├── sync/                        offline szinkron: push/, pull/, handlers/ (táblánként egy handler)
 └── shared/                      több feature által használt elemek
     ├── shared.module.ts         globális modul: DbModule + AccessModule
     ├── bootstrap/               globális beállítások (main.ts és e2e tesztek közösen)
@@ -94,3 +95,13 @@ Csak azokat az almappákat kell létrehozni, amelyekre ténylegesen szükség va
 5. Ha az új tábla járműhöz kötött, vedd fel a `VehicleDeletionService` tranzakciójába is.
 6. Vedd fel a modult az `app.module.ts` `imports` listájába.
 7. Írj egy `test/fuel-logs.e2e-spec.ts` fájlt a `test/utils` segédeivel.
+
+## Új szinkronizált tábla (pl. tankolások a `/sync`-ben)
+
+A táblafüggő szinkron kód a `sync/handlers/<x>/<x>-sync.handler.ts` fájlba kerül (utótag: `.handler`), a handlereket a `sync/handlers/sync-handler.registry.ts` gyűjti össze (utótag: `.registry`).
+
+1. `shared/enums/sync-entity.enum.ts`: új érték (`FuelLog = 'FuelLog'`), és vedd fel a `SYNC_ENTITY_ORDER`-be a szülője után.
+2. `sync/dto/input/<x>-sync-data.dto.ts`: a push `data` mezőjének DTO-ja.
+3. `sync/mapper/<x>-sync.mapper.ts` és `sync/handlers/<x>/`: a sor interfésze és a `SyncEntityHandler` megvalósítása (a `VehicleSyncHandler` a minta). A `checkInsert` adjon `DEFERRED`-et, ha a szülő még nincs a szerveren, és `REJECTED_STALE`-t, ha a szülő törölt.
+4. `SyncHandlerRegistry`: injektáld és vedd fel a listába; `SyncChangesDto`: új mező; `sync.module.ts`: új provider.
+5. A pull lekérdezés a szülő járművön keresztül szűrjön (`JOIN Vehicle v ... AND ${visibleVehiclesSql(user)}`).
