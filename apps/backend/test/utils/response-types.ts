@@ -23,3 +23,32 @@ export interface MemberBody {
   email: string;
   role: string;
 }
+
+export interface SyncChangeBody {
+  id: string;
+  version: number;
+  clientUpdatedAt: string;
+  deletedAt: string | null;
+  data?: Record<string, unknown>;
+}
+
+export interface PushBody {
+  serverNow: string;
+  results: {
+    mutationId: string;
+    status: string;
+    originalStatus?: string;
+    version?: number | null;
+    error?: {code: string; message: string};
+    current?: SyncChangeBody;
+  }[];
+}
+
+export interface PullBody {
+  changes: {Vehicle: SyncChangeBody[]};
+  cursor: number;
+  hasMore: boolean;
+  resetRequired: boolean;
+  scope: string;
+  serverNow: string;
+}
