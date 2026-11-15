@@ -121,6 +121,8 @@ A backend elindítása után (`npm run dev:backend`):
 | `PATCH`, `DELETE /companies/me/members/:userId` | szerepkörváltás, tag eltávolítása (csak admin)        |
 | `GET`, `POST /vehicles`                         | a látható járművek listája, új jármű                  |
 | `GET`, `PATCH`, `DELETE /vehicles/:vehicleId`   | egy jármű lekérése, módosítása, törlése (soft delete) |
+| `POST /sync/push`                               | offline változások feltöltése (LWW, idempotens)       |
+| `GET /sync/pull?since=&limit=&scope=`           | a változott sorok letöltése a kurzor óta              |
 
 **Jogosultságok röviden:** a magánszemély csak a saját járműveit látja. A céges felhasználók a cég összes járművét látják, és lehetnek saját magánjárműveik is (`isCompanyVehicle: false`), amiket a cég nem lát. A cégtag csak a saját bejegyzéseit szerkesztheti. A szerepkört és a cégtagságot a backend minden kérésnél az adatbázisból ellenőrzi.
 
