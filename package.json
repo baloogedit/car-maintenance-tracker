@@ -7,6 +7,7 @@
     "dev": "concurrently -n backend,mobile -c blue,green \"npm:dev:backend\" \"npm:dev:mobile\"",
     "dev:backend": "npm run start:dev --workspace=apps/backend",
     "dev:mobile": "npm run start --workspace=apps/mobile",
+    "dev:phone": "npm run usb --workspace=apps/mobile && npm run dev",
     "build": "npm run build --workspace=apps/backend",
     "lint": "npm run lint --workspaces --if-present",
     "lint:backend": "npm run lint --workspace=apps/backend",
