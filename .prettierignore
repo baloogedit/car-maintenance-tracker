@@ -11,3 +11,4 @@ package-lock.json
 *.lock
 *.svg
 CHANGELOG.md
+apps/mobile/expo-env.d.ts
