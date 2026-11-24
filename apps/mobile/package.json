@@ -47,7 +47,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "usb": "adb reverse tcp:8081 tcp:8081 && adb reverse tcp:3000 tcp:3000",
+    "usb": "adb -d reverse tcp:8081 tcp:8081 && adb -d reverse tcp:3000 tcp:3000",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit"
   },
