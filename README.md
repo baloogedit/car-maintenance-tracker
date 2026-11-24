@@ -20,7 +20,7 @@ Diplomamunka projekt — mobil alkalmazás gépjárművek karbantartásának, ü
 car-maintenance-tracker/
 ├── apps/
 │   ├── backend/        NestJS API + Prisma séma (felépítés: apps/backend/KONVENCIOK.md)
-│   └── mobile/         Expo / React Native mobil app
+│   └── mobile/         Expo / React Native mobil app, offline-first (felépítés: apps/mobile/KONVENCIOK.md)
 ├── eslint.config.base.mjs   közös ESLint alapkonfiguráció
 ├── .prettierrc.cjs           közös Prettier konfiguráció
 └── package.json              workspace gyökér (npm workspaces)
@@ -39,11 +39,29 @@ apps/backend/src/
 
 Minden funkció saját mappát kap, `dto/input`, `dto/output` és `mapper/` almappákkal. A részletes szabályok (mappaszerkezet, elnevezések, új funkció felvétele) az [`apps/backend/KONVENCIOK.md`](apps/backend/KONVENCIOK.md) fájlban vannak.
 
+### Mobil felépítése
+
+```
+apps/mobile/src/
+├── app/          Expo Router útvonalak: (auth)/ belépés, (app)/(tabs)/ alsó fülsáv, jármű adatlap és űrlap
+├── components/   atoms/, molecules/, organisms/, forms/ (atomic design)
+├── api/          REST kliens (token, automatikus frissítés) és témánkénti API modulok
+├── db/           SQLite: migrációk és repositoryk (a képernyők csak ezt olvassák)
+├── sync/         szinkron motor: outbox push, majd pull a kurzor óta
+├── store/        zustand store-ok (belépés, szinkron állapot, téma)
+├── hooks/        képernyő-logika
+└── schemas/, types/, constants/, utils/
+```
+
+Az app **offline-first**: minden változás először a helyi SQLite-ba és az outboxba kerül, a szinkron motor pedig hálózat elérhetőségekor feltölti (`/sync/push`), majd letölti a többi eszköz változásait (`/sync/pull`). A részletes szabályok az [`apps/mobile/KONVENCIOK.md`](apps/mobile/KONVENCIOK.md) fájlban vannak.
+
 ## Előfeltételek
 
 - Node.js 22 vagy újabb és npm (a backend tesztjeihez **Node 24.9+** kell)
 - SQL Server 2025 Express (lokálisan telepítve, vagy elérhető instance)
-- Expo CLI használatához: Android Studio / Xcode, vagy fizikai eszköz az Expo Go / Dev Client-hez
+- Android telefon fejlesztői módban (USB hibakereséssel) vagy Android Studio emulátor
+- Android Studio SDK Platform-Tools (`adb`), a `platform-tools` mappa a `PATH`-ban
+- Expo fiók és EAS CLI (`npm install -g eas-cli`) a dev client buildhez
 
 ## Telepítés
 
@@ -70,6 +88,29 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 A backend induláskor ellenőrzi a kötelező változókat, és ha valamelyik hiányzik, érthető hibával leáll.
 
+## A mobil app futtatása
+
+Az app nem Expo Go-ban, hanem saját **development buildben** (dev client) fut, mert natív csomagokat használ (SQLite, SecureStore).
+
+1. **Dev client build** (csak először, és ha új natív csomag kerül be). Az `apps/mobile` mappában:
+
+   ```bash
+   eas build --profile development --platform android
+   eas build:run --platform android --latest   # telepíti a csatlakoztatott telefonra
+   ```
+
+   Windowson a helyi build (`npx expo run:android`) hosszú repó útvonalnál a 260 karakteres útvonalkorlát miatt elhasalhat, ezért EAS-en (felhőben) buildelünk.
+
+2. **A backend címe:** `apps/mobile/.env.local` (nem kerül a repóba):
+
+   | Eszköz        | `EXPO_PUBLIC_API_URL`       |
+   | ------------- | --------------------------- |
+   | telefon USB-n | `http://localhost:3000`     |
+   | emulátor      | `http://10.0.2.2:3000`      |
+   | telefon wifin | `http://<a gép IP-je>:3000` |
+
+3. **Indítás** a gyökérből: `npm run dev:phone` (USB-s telefon) vagy `npm run dev` (emulátor, wifi). A telefonon nyisd meg a dev client appot.
+
 ## Fejlesztés közben használt parancsok
 
 A gyökérből futtatva (npm workspaces segítségével mindkét app-ot eléri):
@@ -77,6 +118,7 @@ A gyökérből futtatva (npm workspaces segítségével mindkét app-ot eléri):
 | Parancs                                        | Mit csinál                                                          |
 | ---------------------------------------------- | ------------------------------------------------------------------- |
 | `npm run dev`                                  | backend + mobile egyszerre, külön színezett logokkal (concurrently) |
+| `npm run dev:phone`                            | mint a `dev`, de előtte `adb reverse` a USB-s telefonhoz            |
 | `npm run dev:backend`                          | csak a NestJS backend (watch módban)                                |
 | `npm run dev:mobile`                           | csak az Expo dev szerver                                            |
 | `npm run lint`                                 | lint futtatása mindkét workspace-en                                 |
