@@ -34,6 +34,7 @@ apps/backend/src/
 ├── company/     cég létrehozása, csatlakozás csatlakozási kóddal
 ├── health/      GET /health
 ├── vehicle/     járművek (CRUD, soft delete)
+├── sync/        offline szinkron: POST /sync/push, GET /sync/pull
 └── shared/      közös elemek: config, guardok, dekorátorok, jogosultsági szabályok, adatbázis
 ```
 
@@ -96,8 +97,10 @@ Az app nem Expo Go-ban, hanem saját **development buildben** (dev client) fut, 
 
    ```bash
    eas build --profile development --platform android
-   eas build:run --platform android --latest   # telepíti a csatlakoztatott telefonra
+   eas build:run --platform android --latest   # emulátorra telepíti
    ```
+
+   Fizikai telefonra: az expo.dev build oldaláról töltsd le az `.apk`-t, majd `adb install -r <fájl>.apk` (vagy olvasd be a build oldalán lévő QR-kódot a telefonnal).
 
    Windowson a helyi build (`npx expo run:android`) hosszú repó útvonalnál a 260 karakteres útvonalkorlát miatt elhasalhat, ezért EAS-en (felhőben) buildelünk.
 
@@ -111,22 +114,25 @@ Az app nem Expo Go-ban, hanem saját **development buildben** (dev client) fut, 
 
 3. **Indítás** a gyökérből: `npm run dev:phone` (USB-s telefon) vagy `npm run dev` (emulátor, wifi). A telefonon nyisd meg a dev client appot.
 
+4. **Offline teszt** (USB-s telefonnál): a futó `dev:phone` mellett egy második terminálban `npm run offline`. Ilyenkor a telefon nem éri el a backendet, de az app tovább működik: a változások a helyi SQLite-ba és az outboxba kerülnek, a szinkron jelző „Offline”-t mutat. `npm run online` után a „Szinkronizálás most” gombra (vagy magától, a következő körben) felmennek a szerverre. Közben ne töltsd újra az appot.
+
 ## Fejlesztés közben használt parancsok
 
 A gyökérből futtatva (npm workspaces segítségével mindkét app-ot eléri):
 
-| Parancs                                        | Mit csinál                                                          |
-| ---------------------------------------------- | ------------------------------------------------------------------- |
-| `npm run dev`                                  | backend + mobile egyszerre, külön színezett logokkal (concurrently) |
-| `npm run dev:phone`                            | mint a `dev`, de előtte `adb reverse` a USB-s telefonhoz            |
-| `npm run dev:backend`                          | csak a NestJS backend (watch módban)                                |
-| `npm run dev:mobile`                           | csak az Expo dev szerver                                            |
-| `npm run lint`                                 | lint futtatása mindkét workspace-en                                 |
-| `npm run lint:backend` / `npm run lint:mobile` | lint csak az egyik app-on                                           |
-| `npm run format`                               | Prettier formázás az egész repóra                                   |
-| `npm run format:check`                         | csak ellenőrzés, nem ír felül semmit (CI-hez hasznos)               |
-| `npm run test`                                 | tesztek futtatása minden workspace-en, ahol van test script         |
-| `npm run typecheck`                            | TypeScript típusellenőrzés mindkét app-on                           |
+| Parancs                                        | Mit csinál                                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------------- |
+| `npm run dev`                                  | backend + mobile egyszerre, külön színezett logokkal (concurrently)       |
+| `npm run dev:backend`                          | csak a NestJS backend (watch módban)                                      |
+| `npm run dev:mobile`                           | csak az Expo dev szerver                                                  |
+| `npm run dev:phone`                            | mint a `dev`, de előtte `adb reverse` a USB-s telefonhoz                  |
+| `npm run offline` / `npm run online`           | USB-s telefonnál leveszi / visszateszi a backend elérését (offline teszt) |
+| `npm run lint`                                 | lint futtatása mindkét workspace-en                                       |
+| `npm run lint:backend` / `npm run lint:mobile` | lint csak az egyik app-on                                                 |
+| `npm run format`                               | Prettier formázás az egész repóra                                         |
+| `npm run format:check`                         | csak ellenőrzés, nem ír felül semmit (CI-hez hasznos)                     |
+| `npm run test`                                 | tesztek futtatása minden workspace-en, ahol van test script               |
+| `npm run typecheck`                            | TypeScript típusellenőrzés mindkét app-on                                 |
 
 ## Adatbázis (Prisma)
 
