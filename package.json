@@ -7,6 +7,9 @@
     "dev": "concurrently -n backend,mobile -c blue,green \"npm:dev:backend\" \"npm:dev:mobile\"",
     "dev:backend": "npm run start:dev --workspace=apps/backend",
     "dev:mobile": "npm run start --workspace=apps/mobile",
+    "dev:phone": "npm run usb --workspace=apps/mobile && npm run dev",
+    "offline": "adb -d reverse --remove tcp:3000",
+    "online": "adb -d reverse tcp:3000 tcp:3000",
     "build": "npm run build --workspace=apps/backend",
     "lint": "npm run lint --workspaces --if-present",
     "lint:backend": "npm run lint --workspace=apps/backend",
@@ -40,5 +43,9 @@
     "eslint-plugin-simple-import-sort": "^14.0.0",
     "prettier": "^3.9.10",
     "typescript-eslint": "^8.72.0"
+  },
+  "overrides": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }
